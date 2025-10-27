@@ -1521,6 +1521,75 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
     });
   });
 
+  describe('inputFilter', () => {
+    it('should filter input based on the provided filter function', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          inputFilter: (text) => text.replace(/[^0-9]/g, ''),
+        }),
+      );
+
+      act(() => result.current.insert('a1b2c3'));
+      expect(getBufferState(result).text).toBe('123');
+    });
+
+    it('should handle empty result from filter', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          inputFilter: (text) => text.replace(/[^0-9]/g, ''),
+        }),
+      );
+
+      act(() => result.current.insert('abc'));
+      expect(getBufferState(result).text).toBe('');
+    });
+
+    it('should filter pasted text', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          inputFilter: (text) => text.toUpperCase(),
+        }),
+      );
+
+      act(() => result.current.insert('hello', { paste: true }));
+      expect(getBufferState(result).text).toBe('HELLO');
+    });
+
+    it('should not filter newlines if they are allowed by the filter', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          inputFilter: (text) => text, // Allow everything including newlines
+        }),
+      );
+
+      act(() => result.current.insert('a\nb'));
+      // The insert function splits by newline and inserts separately if it detects them.
+      // If the filter allows them, they should be handled correctly by the subsequent logic in insert.
+      expect(getBufferState(result).text).toBe('a\nb');
+    });
+
+    it('should filter before newline check in insert', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          inputFilter: (text) => text.replace(/\n/g, ''), // Filter out newlines
+        }),
+      );
+
+      act(() => result.current.insert('a\nb'));
+      expect(getBufferState(result).text).toBe('ab');
+    });
+  });
+
   describe('stripAnsi', () => {
     it('should correctly strip ANSI escape codes', () => {
       const textWithAnsi = '\x1B[31mHello\x1B[0m World';

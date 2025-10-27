@@ -31,6 +31,7 @@ export function ApiAuthDialog({
       height: 10,
     },
     isValidPath: () => false, // No path validation needed for API key
+    inputFilter: (text) => text.replace(/[^a-zA-Z0-9_-]/g, ''),
   });
 
   const handleSubmit = (value: string) => {

@@ -1095,7 +1095,7 @@ Logging in with Google... Please restart Gemini CLI to continue.
     isAuthDialogOpen ||
     authState === AuthState.AwaitingApiKeyInput;
 
-  useKeypress(handleGlobalKeypress, { isActive: !dialogsVisible });
+  useKeypress(handleGlobalKeypress, { isActive: true });
 
   // Update terminal title with Gemini CLI status and thoughts
   useEffect(() => {

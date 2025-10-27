@@ -518,6 +518,7 @@ interface UseTextBufferProps {
   onChange?: (text: string) => void; // Callback for when text changes
   isValidPath: (path: string) => boolean;
   shellModeActive?: boolean; // Whether the text buffer is in shell mode
+  inputFilter?: (text: string) => string; // Optional filter for input text
 }
 
 interface UndoHistoryEntry {
@@ -1525,6 +1526,7 @@ export function useTextBuffer({
   onChange,
   isValidPath,
   shellModeActive = false,
+  inputFilter,
 }: UseTextBufferProps): TextBuffer {
   const initialState = useMemo((): TextBufferState => {
     const lines = initialText.split('\n');
@@ -1609,6 +1611,11 @@ export function useTextBuffer({
 
   const insert = useCallback(
     (ch: string, { paste = false }: { paste?: boolean } = {}): void => {
+      if (inputFilter) {
+        ch = inputFilter(ch);
+        if (ch.length === 0) return;
+      }
+
       if (/[\n\r]/.test(ch)) {
         dispatch({ type: 'insert', payload: ch });
         return;
@@ -1648,7 +1655,7 @@ export function useTextBuffer({
         dispatch({ type: 'insert', payload: currentText });
       }
     },
-    [isValidPath, shellModeActive],
+    [isValidPath, shellModeActive, inputFilter],
   );
 
   const newline = useCallback((): void => {

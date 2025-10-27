@@ -6,6 +6,7 @@
 
 import { HybridTokenStorage } from '../mcp/token-storage/hybrid-token-storage.js';
 import type { OAuthCredentials } from '../mcp/token-storage/types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const KEYCHAIN_SERVICE_NAME = 'gemini-cli-api-key';
 const DEFAULT_API_KEY_ENTRY = 'default-api-key';
@@ -31,7 +32,7 @@ export class ApiKeyCredentialStorage {
       return null;
     } catch (error: unknown) {
       // Log error but don't crash, just return null so user can re-enter key
-      console.error('Failed to load API key from storage:', error);
+      debugLogger.error('Failed to load API key from storage:', error);
       return null;
     }
   }
@@ -65,8 +66,7 @@ export class ApiKeyCredentialStorage {
     try {
       await this.storage.deleteCredentials(DEFAULT_API_KEY_ENTRY);
     } catch (error: unknown) {
-      console.error('Failed to clear API key from storage:', error);
-      throw new Error('Failed to clear API key');
+      debugLogger.error('Failed to clear API key from storage:', error);
     }
   }
 }
