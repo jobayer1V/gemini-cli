@@ -514,6 +514,7 @@ describe('loadCliConfig', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    vi.spyOn(ExtensionManager.prototype, 'getExtensions').mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -603,7 +604,7 @@ describe('loadCliConfig', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
+    const config = await loadCliConfig(settings, 'test-session', argv);
     expect(config.getFileFilteringRespectGitIgnore()).toBe(
       DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
     );

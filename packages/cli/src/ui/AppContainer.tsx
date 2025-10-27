@@ -169,6 +169,7 @@ export const AppContainer = (props: AppContainerProps) => {
   );
 
   const extensionManager = config.getExtensionLoader() as ExtensionManager;
+  // We are in the interactive CLI, update how we request consent and settings.
   extensionManager.setRequestConsent((description) =>
     requestConsentInteractive(description, addConfirmUpdateExtensionRequest),
   );
