@@ -17,6 +17,7 @@ import { ExtensionStorage } from './storage.js';
 import prompts from 'prompts';
 import * as fsPromises from 'node:fs/promises';
 import * as fs from 'node:fs';
+import { KeychainTokenStorage } from '@google/gemini-cli-core';
 
 vi.mock('prompts');
 vi.mock('os', async (importOriginal) => {
@@ -27,11 +28,56 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
+vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@google/gemini-cli-core')>();
+  return {
+    ...actual,
+    KeychainTokenStorage: vi.fn().mockImplementation(() => ({
+      getSecret: vi.fn(),
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      listSecrets: vi.fn(),
+    })),
+  };
+});
+
+interface MockKeychainStorage {
+  getSecret: ReturnType<typeof vi.fn>;
+  setSecret: ReturnType<typeof vi.fn>;
+  deleteSecret: ReturnType<typeof vi.fn>;
+  listSecrets: ReturnType<typeof vi.fn>;
+}
+
 describe('extensionSettings', () => {
   let tempHomeDir: string;
   let extensionDir: string;
+  let mockKeychainStorage: MockKeychainStorage;
+  let keychainData: Record<string, string>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    keychainData = {};
+    mockKeychainStorage = {
+      getSecret: vi
+        .fn()
+        .mockImplementation(async (key: string) => keychainData[key] || null),
+      setSecret: vi
+        .fn()
+        .mockImplementation(async (key: string, value: string) => {
+          keychainData[key] = value;
+        }),
+      deleteSecret: vi.fn().mockImplementation(async (key: string) => {
+        delete keychainData[key];
+      }),
+      listSecrets: vi
+        .fn()
+        .mockImplementation(async () => Object.keys(keychainData)),
+    };
+    (
+      KeychainTokenStorage as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => mockKeychainStorage);
+
     tempHomeDir = os.tmpdir() + path.sep + `gemini-cli-test-home-${Date.now()}`;
     extensionDir = path.join(tempHomeDir, '.gemini', 'extensions', 'test-ext');
     // Spy and mock the method, but also create the directory so we can write to it.
