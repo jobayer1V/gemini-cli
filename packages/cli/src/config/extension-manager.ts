@@ -406,10 +406,10 @@ export class ExtensionManager implements ExtensionLoader {
       throw new Error('Extensions already loaded, only load extensions once.');
     }
     const extensionsDir = ExtensionStorage.getUserExtensionsDir();
-    if (!fs.existsSync(extensionsDir)) {
-      return [];
-    }
     this.loadedExtensions = [];
+    if (!fs.existsSync(extensionsDir)) {
+      return this.loadedExtensions;
+    }
     for (const subdir of fs.readdirSync(extensionsDir)) {
       const extensionDir = path.join(extensionsDir, subdir);
 
