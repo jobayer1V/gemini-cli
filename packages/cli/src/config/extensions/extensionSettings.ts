@@ -18,6 +18,7 @@ export interface ExtensionSetting {
   name: string;
   description: string;
   envVar: string;
+  // NOTE: If no value is set, this setting will be considered NOT sensitive.
   sensitive?: boolean;
 }
 
