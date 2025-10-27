@@ -103,7 +103,13 @@ export async function getEnvContents(
   extensionId: string,
 ): Promise<Record<string, string>> {
   const extensionStorage = new ExtensionStorage(extensionConfig.name);
-  const keychain = new KeychainTokenStorage(extensionId);
+  let keychain: KeychainTokenStorage | undefined;
+  try {
+    keychain = new KeychainTokenStorage(extensionId);
+  } catch (_) {
+    console.error('No keychain available');
+    return Promise.resolve({});
+  }
   let customEnv: Record<string, string> = {};
   if (fsSync.existsSync(extensionStorage.getEnvFilePath())) {
     const envFile = fsSync.readFileSync(
