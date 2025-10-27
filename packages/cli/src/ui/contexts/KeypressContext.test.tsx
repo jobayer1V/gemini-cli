@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** @vitest-environment jsdom */
+
 import type React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Mock } from 'vitest';
@@ -33,6 +35,9 @@ vi.mock('ink', async (importOriginal) => {
 
 const PASTE_START = '\x1B[200~';
 const PASTE_END = '\x1B[201~';
+// readline will not emit most incomplete kitty sequences but it will give
+// up on sequences like this where the modifier (135) has more than two digits.
+const INCOMPLETE_KITTY_SEQUENCE = '\x1b[97;135';
 
 class MockStdin extends EventEmitter {
   isTTY = true;
@@ -43,16 +48,7 @@ class MockStdin extends EventEmitter {
   pause = vi.fn();
 
   write(text: string) {
-    this.emit('data', Buffer.from(text));
-  }
-
-  /**
-   * Used to directly simulate keyPress events. Certain keypress events might
-   * be impossible to fire in certain versions of node. This allows us to
-   * sidestep readline entirely and just emit the keypress we want.
-   */
-  pressKey(key: Partial<Key>) {
-    this.emit('keypress', null, key);
+    this.emit('data', text);
   }
 }
 
@@ -171,9 +167,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       act(() => result.current.subscribe(keyHandler));
 
       // Send kitty protocol sequence for numpad enter with Ctrl (modifier 5): ESC[57414;5u
-      act(() => {
-        stdin.write(`\x1b[57414;5u`);
-      });
+      act(() => stdin.write(`\x1b[57414;5u`));
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -389,6 +383,61 @@ describe('KeypressContext - Kitty Protocol', () => {
         }),
       );
     });
+    it('should paste start code split over multiple writes', async () => {
+      const keyHandler = vi.fn();
+      const pastedText = 'pasted content';
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => result.current.subscribe(keyHandler));
+
+      act(() => {
+        // Split PASTE_START into two parts
+        stdin.write(PASTE_START.slice(0, 3));
+        stdin.write(PASTE_START.slice(3));
+        stdin.write(pastedText);
+        stdin.write(PASTE_END);
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalledTimes(1);
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paste: true,
+          sequence: pastedText,
+        }),
+      );
+    });
+
+    it('should paste end code split over multiple writes', async () => {
+      const keyHandler = vi.fn();
+      const pastedText = 'pasted content';
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => result.current.subscribe(keyHandler));
+
+      act(() => {
+        stdin.write(PASTE_START);
+        stdin.write(pastedText);
+        // Split PASTE_END into two parts
+        stdin.write(PASTE_END.slice(0, 3));
+        stdin.write(PASTE_END.slice(3));
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalledTimes(1);
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paste: true,
+          sequence: pastedText,
+        }),
+      );
+    });
   });
 
   describe('debug keystroke logging', () => {
@@ -506,15 +555,14 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       act(() => result.current.subscribe(keyHandler));
 
-      // Send incomplete kitty sequence
-      act(() => stdin.pressKey({ sequence: '\x1b[1' }));
+      act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
       // Send Ctrl+C
       act(() => stdin.write('\x03'));
 
       expect(consoleLogSpy).toHaveBeenCalledWith(
         '[DEBUG] Kitty buffer cleared on Ctrl+C:',
-        '\x1b[1',
+        INCOMPLETE_KITTY_SEQUENCE,
       );
 
       // Verify Ctrl+C was handled
@@ -543,19 +591,18 @@ describe('KeypressContext - Kitty Protocol', () => {
       act(() => result.current.subscribe(keyHandler));
 
       // Send incomplete kitty sequence
-      const sequence = '\x1b[12';
-      act(() => stdin.pressKey({ sequence }));
+      act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
       // Verify debug logging for accumulation
       expect(consoleLogSpy).toHaveBeenCalledWith(
         '[DEBUG] Kitty buffer accumulating:',
-        JSON.stringify(sequence),
+        JSON.stringify(INCOMPLETE_KITTY_SEQUENCE),
       );
 
       // Verify warning for char codes
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         'Kitty sequence buffer has content:',
-        JSON.stringify(sequence),
+        JSON.stringify(INCOMPLETE_KITTY_SEQUENCE),
       );
     });
   });
@@ -829,93 +876,75 @@ describe('Kitty Sequence Parsing', () => {
   // Terminals to test
   const terminals = ['iTerm2', 'Ghostty', 'MacTerminal', 'VSCodeTerminal'];
 
-  // Key mappings: letter -> [keycode, accented character, shouldHaveMeta]
-  // Note: µ (mu) is sent with meta:false on iTerm2/VSCode
-  const keys: Record<string, [number, string, boolean]> = {
-    a: [97, 'å', true],
-    o: [111, 'ø', true],
-    m: [109, 'µ', false],
+  // Key mappings: letter -> [keycode, accented character]
+  const keys: Record<string, [number, string]> = {
+    a: [97, 'å'],
+    o: [111, 'ø'],
+    m: [109, 'µ'],
   };
 
   it.each(
     terminals.flatMap((terminal) =>
-      Object.entries(keys).map(
-        ([key, [keycode, accentedChar, shouldHaveMeta]]) => {
-          if (terminal === 'Ghostty') {
-            // Ghostty uses kitty protocol sequences
-            return {
-              terminal,
-              key,
-              kittySequence: `\x1b[${keycode};3u`,
-              expected: {
-                name: key,
-                ctrl: false,
-                meta: true,
-                shift: false,
-                paste: false,
-                kittyProtocol: true,
-              },
-            };
-          } else if (terminal === 'MacTerminal') {
-            // Mac Terminal sends ESC + letter
-            return {
-              terminal,
-              key,
-              kitty: false,
-              input: {
-                sequence: `\x1b${key}`,
-                name: key,
-                ctrl: false,
-                meta: true,
-                shift: false,
-                paste: false,
-              },
-              expected: {
-                sequence: `\x1b${key}`,
-                name: key,
-                ctrl: false,
-                meta: true,
-                shift: false,
-                paste: false,
-              },
-            };
-          } else {
-            // iTerm2 and VSCode send accented characters (å, ø, µ)
-            // Note: µ comes with meta:false but gets converted to m with meta:true
-            return {
-              terminal,
-              key,
-              input: {
-                name: key,
-                ctrl: false,
-                meta: shouldHaveMeta,
-                shift: false,
-                paste: false,
-                sequence: accentedChar,
-              },
-              expected: {
-                name: key,
-                ctrl: false,
-                meta: true, // Always expect meta:true after conversion
-                shift: false,
-                paste: false,
-                sequence: accentedChar,
-              },
-            };
-          }
-        },
-      ),
+      Object.entries(keys).map(([key, [keycode, accentedChar]]) => {
+        if (terminal === 'Ghostty') {
+          // Ghostty uses kitty protocol sequences
+          return {
+            terminal,
+            key,
+            chunk: `\x1b[${keycode};3u`,
+            expected: {
+              name: key,
+              ctrl: false,
+              meta: true,
+              shift: false,
+              paste: false,
+              kittyProtocol: true,
+            },
+          };
+        } else if (terminal === 'MacTerminal') {
+          // Mac Terminal sends ESC + letter
+          return {
+            terminal,
+            key,
+            kitty: false,
+            chunk: `\x1b${key}`,
+            expected: {
+              sequence: `\x1b${key}`,
+              name: key,
+              ctrl: false,
+              meta: true,
+              shift: false,
+              paste: false,
+            },
+          };
+        } else {
+          // iTerm2 and VSCode send accented characters (å, ø, µ)
+          // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
+          // gets converted to m with meta:true
+          return {
+            terminal,
+            key,
+            chunk: accentedChar,
+            expected: {
+              name: key,
+              ctrl: false,
+              meta: true, // Always expect meta:true after conversion
+              shift: false,
+              paste: false,
+              sequence: accentedChar,
+            },
+          };
+        }
+      }),
     ),
   )(
     'should handle Alt+$key in $terminal',
     ({
-      kittySequence,
-      input,
+      chunk,
       expected,
       kitty = true,
     }: {
-      kittySequence?: string;
-      input?: Partial<Key>;
+      chunk: string;
       expected: Partial<Key>;
       kitty?: boolean;
     }) => {
@@ -930,11 +959,7 @@ describe('Kitty Sequence Parsing', () => {
       });
       act(() => result.current.subscribe(keyHandler));
 
-      if (kittySequence) {
-        act(() => stdin.write(kittySequence));
-      } else if (input) {
-        act(() => stdin.pressKey(input));
-      }
+      act(() => stdin.write(chunk));
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining(expected),
@@ -978,8 +1003,7 @@ describe('Kitty Sequence Parsing', () => {
 
     act(() => result.current.subscribe(keyHandler));
 
-    // Send incomplete kitty sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1;' }));
+    act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
     // Should not broadcast immediately
     expect(keyHandler).not.toHaveBeenCalled();
@@ -991,15 +1015,13 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).not.toHaveBeenCalled();
 
     // Advance past timeout
-    act(() => {
-      vi.advanceTimersByTime(10);
-    });
+    act(() => vi.advanceTimersByTime(10));
 
     // Should now broadcast the incomplete sequence as regular input
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         name: '',
-        sequence: '\x1b[1;',
+        sequence: INCOMPLETE_KITTY_SEQUENCE,
         paste: false,
       }),
     );
@@ -1079,8 +1101,7 @@ describe('Kitty Sequence Parsing', () => {
 
     act(() => result.current.subscribe(keyHandler));
 
-    // Send incomplete kitty sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1;' }));
+    act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
     // Press Ctrl+C
     act(() => stdin.write('\x03'));
@@ -1189,13 +1210,13 @@ describe('Kitty Sequence Parsing', () => {
     act(() => result.current.subscribe(keyHandler));
 
     // Start incomplete sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1' }));
+    act(() => stdin.write('\x1b[97;13'));
 
     // Advance time partway
     act(() => vi.advanceTimersByTime(30));
 
     // Add more to sequence
-    act(() => stdin.write('3'));
+    act(() => stdin.write('5'));
 
     // Advance time from the first timeout point
     act(() => vi.advanceTimersByTime(25));
@@ -1209,7 +1230,7 @@ describe('Kitty Sequence Parsing', () => {
     // Should now parse as complete enter key
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'return',
+        name: 'a',
         kittyProtocol: true,
       }),
     );
@@ -1221,8 +1242,7 @@ describe('Kitty Sequence Parsing', () => {
 
     act(() => result.current.subscribe(keyHandler));
 
-    // Send incomplete kitty sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1;' }));
+    act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
     // Incomplete sequence should be buffered, not broadcast
     expect(keyHandler).not.toHaveBeenCalled();
@@ -1235,7 +1255,7 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         name: '',
-        sequence: '\x1b[1;',
+        sequence: INCOMPLETE_KITTY_SEQUENCE,
         paste: false,
       }),
     );
@@ -1247,8 +1267,7 @@ describe('Kitty Sequence Parsing', () => {
 
     act(() => result.current.subscribe(keyHandler));
 
-    // Send incomplete kitty sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1;' }));
+    act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
     // Incomplete sequence should be buffered, not broadcast
     expect(keyHandler).not.toHaveBeenCalled();
@@ -1261,7 +1280,7 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         name: '',
-        sequence: '\x1b[1;',
+        sequence: INCOMPLETE_KITTY_SEQUENCE,
         paste: false,
       }),
     );
@@ -1274,8 +1293,7 @@ describe('Kitty Sequence Parsing', () => {
 
     act(() => result.current.subscribe(keyHandler));
 
-    // Send incomplete kitty sequence
-    act(() => stdin.pressKey({ sequence: '\x1b[1;' }));
+    act(() => stdin.write(INCOMPLETE_KITTY_SEQUENCE));
 
     // Incomplete sequence should be buffered, not broadcast
     expect(keyHandler).not.toHaveBeenCalled();
@@ -1288,7 +1306,7 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         name: '',
-        sequence: '\x1b[1;',
+        sequence: INCOMPLETE_KITTY_SEQUENCE,
         paste: false,
       }),
     );
