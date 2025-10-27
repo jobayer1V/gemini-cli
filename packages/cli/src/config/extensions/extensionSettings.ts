@@ -31,7 +31,13 @@ export async function maybePromptForSettings(
 ): Promise<void> {
   const { name: extensionName, settings } = extensionConfig;
   const envFilePath = new ExtensionStorage(extensionName).getEnvFilePath();
-  const keychain = new KeychainTokenStorage(extensionId);
+  let keychain: KeychainTokenStorage | undefined;
+  try {
+    keychain = new KeychainTokenStorage(extensionId);
+  } catch (_) {
+    console.error('No keychain available');
+    return;
+  }
 
   if (!settings || settings.length === 0) {
     await clearSettings(envFilePath, keychain);
