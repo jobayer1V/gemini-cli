@@ -26,7 +26,7 @@ export function handleEnable(args: EnableArgs) {
     workspaceDir: workingDir,
     requestConsent: requestConsentNonInteractive,
     requestSetting: promptForSetting,
-    loadedSettings: loadSettings(workingDir),
+    settings: loadSettings(workingDir).merged,
   });
   try {
     if (args.scope?.toLowerCase() === 'workspace') {

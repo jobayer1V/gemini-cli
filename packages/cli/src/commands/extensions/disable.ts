@@ -23,7 +23,7 @@ export function handleDisable(args: DisableArgs) {
     workspaceDir,
     requestConsent: requestConsentNonInteractive,
     requestSetting: promptForSetting,
-    loadedSettings: loadSettings(workspaceDir),
+    settings: loadSettings(workspaceDir).merged,
   });
 
   try {

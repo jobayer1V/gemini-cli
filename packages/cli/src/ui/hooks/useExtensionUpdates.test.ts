@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createExtension } from '../../test-utils/createExtension.js';
 import { useExtensionUpdates } from './useExtensionUpdates.js';
-import { GEMINI_DIR, type GeminiCLIExtension } from '@google/gemini-cli-core';
+import { GEMINI_DIR } from '@google/gemini-cli-core';
 import { renderHook, waitFor } from '@testing-library/react';
 import { MessageType } from '../types.js';
 import {
@@ -57,7 +57,7 @@ describe('useExtensionUpdates', () => {
       workspaceDir: tempHomeDir,
       requestConsent: vi.fn(),
       requestSetting: vi.fn(),
-      loadedSettings: loadSettings(),
+      settings: loadSettings().merged,
     });
   });
 
@@ -66,11 +66,10 @@ describe('useExtensionUpdates', () => {
   });
 
   it('should check for updates and log a message if an update is available', async () => {
-    const extensions = [
+    vi.spyOn(extensionManager, 'getExtensions').mockReturnValue([
       {
         name: 'test-extension',
         id: 'test-extension-id',
-        type: 'git',
         version: '1.0.0',
         path: '/some/path',
         isActive: true,
@@ -81,7 +80,7 @@ describe('useExtensionUpdates', () => {
         },
         contextFiles: [],
       },
-    ];
+    ]);
     const addItem = vi.fn();
 
     vi.mocked(checkForAllExtensionUpdates).mockImplementation(
@@ -96,13 +95,7 @@ describe('useExtensionUpdates', () => {
       },
     );
 
-    renderHook(() =>
-      useExtensionUpdates(
-        extensions as GeminiCLIExtension[],
-        extensionManager,
-        addItem,
-      ),
-    );
+    renderHook(() => useExtensionUpdates(extensionManager, addItem));
 
     await waitFor(() => {
       expect(addItem).toHaveBeenCalledWith(
@@ -116,7 +109,7 @@ describe('useExtensionUpdates', () => {
   });
 
   it('should check for updates and automatically update if autoUpdate is true', async () => {
-    const extensionDir = createExtension({
+    createExtension({
       extensionsDir: userExtensionsDir,
       name: 'test-extension',
       version: '1.0.0',
@@ -126,7 +119,6 @@ describe('useExtensionUpdates', () => {
         autoUpdate: true,
       },
     });
-    const extension = extensionManager.loadExtension(extensionDir)!;
 
     const addItem = vi.fn();
 
@@ -148,9 +140,8 @@ describe('useExtensionUpdates', () => {
       name: '',
     });
 
-    renderHook(() =>
-      useExtensionUpdates([extension], extensionManager, addItem),
-    );
+    extensionManager.loadExtensions();
+    renderHook(() => useExtensionUpdates(extensionManager, addItem));
 
     await waitFor(
       () => {
@@ -167,7 +158,7 @@ describe('useExtensionUpdates', () => {
   });
 
   it('should batch update notifications for multiple extensions', async () => {
-    const extensionDir1 = createExtension({
+    createExtension({
       extensionsDir: userExtensionsDir,
       name: 'test-extension-1',
       version: '1.0.0',
@@ -177,7 +168,7 @@ describe('useExtensionUpdates', () => {
         autoUpdate: true,
       },
     });
-    const extensionDir2 = createExtension({
+    createExtension({
       extensionsDir: userExtensionsDir,
       name: 'test-extension-2',
       version: '2.0.0',
@@ -188,10 +179,7 @@ describe('useExtensionUpdates', () => {
       },
     });
 
-    const extensions = [
-      extensionManager.loadExtension(extensionDir1)!,
-      extensionManager.loadExtension(extensionDir2)!,
-    ];
+    extensionManager.loadExtensions();
 
     const addItem = vi.fn();
 
@@ -226,9 +214,7 @@ describe('useExtensionUpdates', () => {
         name: '',
       });
 
-    renderHook(() =>
-      useExtensionUpdates(extensions, extensionManager, addItem),
-    );
+    renderHook(() => useExtensionUpdates(extensionManager, addItem));
 
     await waitFor(
       () => {
@@ -253,11 +239,10 @@ describe('useExtensionUpdates', () => {
   });
 
   it('should batch update notifications for multiple extensions with autoUpdate: false', async () => {
-    const extensions = [
+    vi.spyOn(extensionManager, 'getExtensions').mockReturnValue([
       {
         name: 'test-extension-1',
         id: 'test-extension-1-id',
-        type: 'git',
         version: '1.0.0',
         path: '/some/path1',
         isActive: true,
@@ -272,7 +257,6 @@ describe('useExtensionUpdates', () => {
         name: 'test-extension-2',
         id: 'test-extension-2-id',
 
-        type: 'git',
         version: '2.0.0',
         path: '/some/path2',
         isActive: true,
@@ -283,7 +267,7 @@ describe('useExtensionUpdates', () => {
         },
         contextFiles: [],
       },
-    ];
+    ]);
     const addItem = vi.fn();
 
     vi.mocked(checkForAllExtensionUpdates).mockImplementation(
@@ -308,13 +292,7 @@ describe('useExtensionUpdates', () => {
       },
     );
 
-    renderHook(() =>
-      useExtensionUpdates(
-        extensions as GeminiCLIExtension[],
-        extensionManager,
-        addItem,
-      ),
-    );
+    renderHook(() => useExtensionUpdates(extensionManager, addItem));
 
     await waitFor(() => {
       expect(addItem).toHaveBeenCalledTimes(1);

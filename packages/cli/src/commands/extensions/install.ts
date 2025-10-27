@@ -74,7 +74,7 @@ export async function handleInstall(args: InstallArgs) {
       workspaceDir,
       requestConsent,
       requestSetting: promptForSetting,
-      loadedSettings: loadSettings(workspaceDir),
+      settings: loadSettings(workspaceDir).merged,
     });
     const name =
       await extensionManager.installOrUpdateExtension(installMetadata);
