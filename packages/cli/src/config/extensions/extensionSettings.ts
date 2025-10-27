@@ -161,6 +161,9 @@ async function clearSettings(
   if (fsSync.existsSync(envFilePath)) {
     await fs.writeFile(envFilePath, '');
   }
+  if (!keychain.isAvailable()) {
+    return;
+  }
   const secrets = await keychain.listSecrets();
   for (const secret of secrets) {
     await keychain.deleteSecret(secret);
