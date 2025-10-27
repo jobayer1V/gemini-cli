@@ -15,6 +15,7 @@ import {
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
   ExtensionEnableEvent,
+  KeychainTokenStorage,
 } from '@google/gemini-cli-core';
 import { loadSettings, SettingScope } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
@@ -96,6 +97,13 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
     ExtensionInstallEvent: vi.fn(),
     ExtensionUninstallEvent: vi.fn(),
     ExtensionDisableEvent: vi.fn(),
+    KeychainTokenStorage: vi.fn().mockImplementation(() => ({
+      getSecret: vi.fn(),
+      setSecret: vi.fn(),
+      deleteSecret: vi.fn(),
+      listSecrets: vi.fn(),
+      isAvailable: vi.fn().mockResolvedValue(true),
+    })),
   };
 });
 
@@ -107,6 +115,14 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
+interface MockKeychainStorage {
+  getSecret: ReturnType<typeof vi.fn>;
+  setSecret: ReturnType<typeof vi.fn>;
+  deleteSecret: ReturnType<typeof vi.fn>;
+  listSecrets: ReturnType<typeof vi.fn>;
+  isAvailable: ReturnType<typeof vi.fn>;
+}
+
 describe('extension tests', () => {
   let tempHomeDir: string;
   let tempWorkspaceDir: string;
@@ -116,8 +132,32 @@ describe('extension tests', () => {
   let mockPromptForSettings: MockedFunction<
     (setting: ExtensionSetting) => Promise<string>
   >;
+  let mockKeychainStorage: MockKeychainStorage;
+  let keychainData: Record<string, string>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    keychainData = {};
+    mockKeychainStorage = {
+      getSecret: vi
+        .fn()
+        .mockImplementation(async (key: string) => keychainData[key] || null),
+      setSecret: vi
+        .fn()
+        .mockImplementation(async (key: string, value: string) => {
+          keychainData[key] = value;
+        }),
+      deleteSecret: vi.fn().mockImplementation(async (key: string) => {
+        delete keychainData[key];
+      }),
+      listSecrets: vi
+        .fn()
+        .mockImplementation(async () => Object.keys(keychainData)),
+      isAvailable: vi.fn().mockResolvedValue(true),
+    };
+    (
+      KeychainTokenStorage as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => mockKeychainStorage);
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
