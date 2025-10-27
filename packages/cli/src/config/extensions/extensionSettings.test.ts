@@ -38,6 +38,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
       setSecret: vi.fn(),
       deleteSecret: vi.fn(),
       listSecrets: vi.fn(),
+      isAvailable: vi.fn().mockResolvedValue(true),
     })),
   };
 });
@@ -47,6 +48,7 @@ interface MockKeychainStorage {
   setSecret: ReturnType<typeof vi.fn>;
   deleteSecret: ReturnType<typeof vi.fn>;
   listSecrets: ReturnType<typeof vi.fn>;
+  isAvailable: ReturnType<typeof vi.fn>;
 }
 
 describe('extensionSettings', () => {
@@ -73,6 +75,7 @@ describe('extensionSettings', () => {
       listSecrets: vi
         .fn()
         .mockImplementation(async () => Object.keys(keychainData)),
+      isAvailable: vi.fn().mockResolvedValue(true),
     };
     (
       KeychainTokenStorage as unknown as ReturnType<typeof vi.fn>
