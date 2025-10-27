@@ -25,6 +25,7 @@ export function handleDisable(args: DisableArgs) {
     requestSetting: promptForSetting,
     settings: loadSettings(workspaceDir).merged,
   });
+  extensionManager.loadExtensions();
 
   try {
     if (args.scope?.toLowerCase() === 'workspace') {

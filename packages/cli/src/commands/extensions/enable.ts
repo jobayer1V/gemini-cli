@@ -28,6 +28,8 @@ export function handleEnable(args: EnableArgs) {
     requestSetting: promptForSetting,
     settings: loadSettings(workingDir).merged,
   });
+  extensionManager.loadExtensions();
+
   try {
     if (args.scope?.toLowerCase() === 'workspace') {
       extensionManager.enableExtension(args.name, SettingScope.Workspace);
