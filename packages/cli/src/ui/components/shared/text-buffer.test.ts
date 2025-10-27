@@ -1657,6 +1657,74 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       expect(getBufferState(result).text).toBe('hello world');
     });
   });
+
+  describe('singleLine mode', () => {
+    it('should not insert a newline character when singleLine is true', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          singleLine: true,
+        }),
+      );
+      act(() => result.current.insert('\n'));
+      const state = getBufferState(result);
+      expect(state.text).toBe('');
+      expect(state.lines).toEqual(['']);
+    });
+
+    it('should not create a new line when newline() is called and singleLine is true', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          initialText: 'ab',
+          viewport,
+          isValidPath: () => false,
+          singleLine: true,
+        }),
+      );
+      act(() => result.current.move('end')); // cursor at [0,2]
+      act(() => result.current.newline());
+      const state = getBufferState(result);
+      expect(state.text).toBe('ab');
+      expect(state.lines).toEqual(['ab']);
+      expect(state.cursor).toEqual([0, 2]);
+    });
+
+    it('should not handle "Enter" key as newline when singleLine is true', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          singleLine: true,
+        }),
+      );
+      act(() =>
+        result.current.handleInput({
+          name: 'return',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          paste: false,
+          sequence: '\r',
+        }),
+      );
+      expect(getBufferState(result).lines).toEqual(['']);
+    });
+
+    it('should strip newlines from pasted text when singleLine is true', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          viewport,
+          isValidPath: () => false,
+          singleLine: true,
+        }),
+      );
+      act(() => result.current.insert('hello\nworld', { paste: true }));
+      const state = getBufferState(result);
+      expect(state.text).toBe('helloworld');
+      expect(state.lines).toEqual(['helloworld']);
+    });
+  });
 });
 
 describe('offsetToLogicalPos', () => {

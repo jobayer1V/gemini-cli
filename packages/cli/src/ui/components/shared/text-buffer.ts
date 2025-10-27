@@ -519,6 +519,7 @@ interface UseTextBufferProps {
   isValidPath: (path: string) => boolean;
   shellModeActive?: boolean; // Whether the text buffer is in shell mode
   inputFilter?: (text: string) => string; // Optional filter for input text
+  singleLine?: boolean;
 }
 
 interface UndoHistoryEntry {
@@ -1527,6 +1528,7 @@ export function useTextBuffer({
   isValidPath,
   shellModeActive = false,
   inputFilter,
+  singleLine = false,
 }: UseTextBufferProps): TextBuffer {
   const initialState = useMemo((): TextBufferState => {
     const lines = initialText.split('\n');
@@ -1611,12 +1613,15 @@ export function useTextBuffer({
 
   const insert = useCallback(
     (ch: string, { paste = false }: { paste?: boolean } = {}): void => {
+      if (singleLine) {
+        ch = ch.replace(/[\r\n]/g, '');
+      }
       if (inputFilter) {
         ch = inputFilter(ch);
         if (ch.length === 0) return;
       }
 
-      if (/[\n\r]/.test(ch)) {
+      if (!singleLine && /[\n\r]/.test(ch)) {
         dispatch({ type: 'insert', payload: ch });
         return;
       }
@@ -1655,12 +1660,15 @@ export function useTextBuffer({
         dispatch({ type: 'insert', payload: currentText });
       }
     },
-    [isValidPath, shellModeActive, inputFilter],
+    [isValidPath, shellModeActive, inputFilter, singleLine],
   );
 
   const newline = useCallback((): void => {
+    if (singleLine) {
+      return;
+    }
     dispatch({ type: 'insert', payload: '\n' });
-  }, []);
+  }, [singleLine]);
 
   const backspace = useCallback((): void => {
     dispatch({ type: 'backspace' });
@@ -1902,10 +1910,11 @@ export function useTextBuffer({
       }
 
       if (
-        key.name === 'return' ||
-        input === '\r' ||
-        input === '\n' ||
-        input === '\\\r' // VSCode terminal represents shift + enter this way
+        !singleLine &&
+        (key.name === 'return' ||
+          input === '\r' ||
+          input === '\n' ||
+          input === '\\r') // VSCode terminal represents shift + enter this way
       )
         newline();
       else if (key.name === 'left' && !key.meta && !key.ctrl) move('left');
@@ -1954,6 +1963,7 @@ export function useTextBuffer({
       insert,
       undo,
       redo,
+      singleLine,
     ],
   );
 

@@ -28,10 +28,12 @@ export function ApiAuthDialog({
     initialCursorOffset: defaultValue?.length || 0,
     viewport: {
       width: 100, // Fixed width is sufficient for this dialog
-      height: 10,
+      height: 1,
     },
     isValidPath: () => false, // No path validation needed for API key
-    inputFilter: (text) => text.replace(/[^a-zA-Z0-9_-]/g, ''),
+    inputFilter: (text) =>
+      text.replace(/[^a-zA-Z0-9_-]/g, '').replace(/[\r\n]/g, ''),
+    singleLine: true,
   });
 
   const handleSubmit = (value: string) => {
