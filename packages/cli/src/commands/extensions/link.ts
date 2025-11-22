@@ -15,6 +15,7 @@ import { requestConsentNonInteractive } from '../../config/extensions/consent.js
 import { ExtensionManager } from '../../config/extension-manager.js';
 import { loadSettings } from '../../config/settings.js';
 import { promptForSetting } from '../../config/extensions/extensionSettings.js';
+import { exitCli } from '../utils.js';
 
 interface InstallArgs {
   path: string;
@@ -34,10 +35,10 @@ export async function handleLink(args: InstallArgs) {
       settings: loadSettings(workspaceDir).merged,
     });
     await extensionManager.loadExtensions();
-    const extensionName =
+    const extension =
       await extensionManager.installOrUpdateExtension(installMetadata);
     debugLogger.log(
-      `Extension "${extensionName}" linked successfully and enabled.`,
+      `Extension "${extension.name}" linked successfully and enabled.`,
     );
   } catch (error) {
     debugLogger.error(getErrorMessage(error));
@@ -60,5 +61,6 @@ export const linkCommand: CommandModule = {
     await handleLink({
       path: argv['path'] as string,
     });
+    await exitCli();
   },
 };

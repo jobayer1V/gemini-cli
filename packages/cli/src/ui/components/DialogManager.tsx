@@ -14,9 +14,12 @@ import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { AuthInProgress } from '../auth/AuthInProgress.js';
 import { AuthDialog } from '../auth/AuthDialog.js';
+import { ApiAuthDialog } from '../auth/ApiAuthDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { ProQuotaDialog } from './ProQuotaDialog.js';
+import { runExitCleanup } from '../../utils/cleanup.js';
+import { RELAUNCH_EXIT_CODE } from '../../utils/processUtils.js';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import { ModelDialog } from './ModelDialog.js';
 import { theme } from '../semantic-colors.js';
@@ -54,7 +57,11 @@ export const DialogManager = ({
       <ProQuotaDialog
         failedModel={uiState.proQuotaRequest.failedModel}
         fallbackModel={uiState.proQuotaRequest.fallbackModel}
+        message={uiState.proQuotaRequest.message}
+        isTerminalQuotaError={uiState.proQuotaRequest.isTerminalQuotaError}
+        isModelNotFoundError={!!uiState.proQuotaRequest.isModelNotFoundError}
         onChoice={uiActions.handleProQuotaChoice}
+        userTier={uiState.userTier}
       />
     );
   }
@@ -132,8 +139,12 @@ export const DialogManager = ({
         <SettingsDialog
           settings={settings}
           onSelect={() => uiActions.closeSettingsDialog()}
-          onRestartRequest={() => process.exit(0)}
+          onRestartRequest={async () => {
+            await runExitCleanup();
+            process.exit(RELAUNCH_EXIT_CODE);
+          }}
           availableTerminalHeight={terminalHeight - staticExtraHeight}
+          config={config}
         />
       </Box>
     );
@@ -148,6 +159,18 @@ export const DialogManager = ({
           uiActions.onAuthError('Authentication cancelled.');
         }}
       />
+    );
+  }
+  if (uiState.isAwaitingApiKeyInput) {
+    return (
+      <Box flexDirection="column">
+        <ApiAuthDialog
+          onSubmit={uiActions.handleApiKeySubmit}
+          onCancel={uiActions.handleApiKeyCancel}
+          error={uiState.authError}
+          defaultValue={uiState.apiKeyDefaultValue}
+        />
+      </Box>
     );
   }
   if (uiState.isAuthDialogOpen) {
@@ -193,6 +216,7 @@ export const DialogManager = ({
       <PermissionsModifyTrustDialog
         onExit={uiActions.closePermissionsDialog}
         addItem={addItem}
+        targetDirectory={uiState.permissionsDialogProps?.targetDirectory}
       />
     );
   }
